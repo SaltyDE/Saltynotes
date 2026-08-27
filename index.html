@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#efe4c8" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="SaltyNotes" />
+<title>SaltyNotes</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/favicon.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<button id="navToggle" class="nav-toggle" aria-label="Menü öffnen" aria-expanded="false">
+  <span></span><span></span><span></span>
+</button>
+<div id="navScrim" class="nav-scrim"></div>
+
+<div class="app-shell">
+  <nav class="sidebar" id="sidebar" aria-label="Hauptbereiche">
+    <div class="brand">
+      <span class="brand-mark">🖇️</span>
+      <span class="brand-text">SaltyNotes</span>
+    </div>
+    <button class="nav-item" data-section="checkliste" type="button">
+      <span class="nav-icon">☑</span>
+      <span class="nav-label">Checkliste</span>
+    </button>
+    <button class="nav-item" data-section="dokumentation" type="button">
+      <span class="nav-icon">📄</span>
+      <span class="nav-label">Dokumentation</span>
+    </button>
+    <button class="nav-item" data-section="brainstorming" type="button">
+      <span class="nav-icon">💡</span>
+      <span class="nav-label">Brainstorming</span>
+    </button>
+    <div class="sidebar-footer">Alles wird lokal auf deinem Gerät gespeichert.</div>
+  </nav>
+
+  <main class="content" id="content" tabindex="-1">
+    <!-- rendered by app.js -->
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+
+<script src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
