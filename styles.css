@@ -262,6 +262,21 @@ h1, h2, h3, .brand-text, .nav-label, button, .page-title, .card-title {
   cursor: pointer;
 }
 .card-delete:hover { background: rgba(164, 70, 47, 0.25); }
+.card-export {
+  position: absolute;
+  top: 8px;
+  right: 42px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(91, 62, 40, 0.1);
+  color: var(--brown);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.card-export:hover { background: rgba(91, 62, 40, 0.22); }
 .card-progress {
   height: 6px;
   border-radius: 4px;
@@ -303,9 +318,20 @@ h1, h2, h3, .brand-text, .nav-label, button, .page-title, .card-title {
 
 /* ---------- checkliste ---------- */
 
+.checklist-head {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 2fr) minmax(0, 1.2fr) 30px;
+  gap: 12px;
+  padding: 0 6px 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
 .checklist-items { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 16px; }
 .checklist-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 2fr) minmax(0, 1.2fr) 30px;
   align-items: center;
   gap: 12px;
   padding: 10px 6px;
@@ -318,15 +344,35 @@ h1, h2, h3, .brand-text, .nav-label, button, .page-title, .card-title {
   flex-shrink: 0;
 }
 .checklist-item input[type="text"] {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
   border: none;
   background: transparent;
   font-size: 16px;
   padding: 4px 2px;
   color: var(--ink);
 }
+.checklist-item .item-status {
+  font-size: 14px;
+  color: var(--ink-soft);
+  border-bottom: 1px dashed var(--paper-line);
+}
+.checklist-item .item-status:focus { border-bottom-color: var(--accent); }
 .checklist-item input[type="text"]:focus { outline: none; }
-.checklist-item.done input[type="text"] { text-decoration: line-through; color: var(--ink-soft); }
+.checklist-item.done .item-text { text-decoration: line-through; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .checklist-head { display: none; }
+  .checklist-item {
+    grid-template-columns: 22px 1fr 30px;
+    grid-template-areas: "check text remove" "status status status";
+    row-gap: 4px;
+  }
+  .checklist-item input[type="checkbox"] { grid-area: check; }
+  .checklist-item .item-text { grid-area: text; }
+  .checklist-item .item-remove { grid-area: remove; }
+  .checklist-item .item-status { grid-area: status; margin-left: 34px; }
+}
 .item-remove {
   border: none;
   background: none;

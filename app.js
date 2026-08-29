@@ -186,6 +186,64 @@ function render() {
    1) CHECKLISTE
    ========================================================= */
 
+/* ---- Export / Import (Checkliste als .json-Datei) ---- */
+
+function slugifyFilename(name) {
+  return (name || "checkliste")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 60) || "checkliste";
+}
+
+function downloadJson(filename, dataObj) {
+  const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportChecklist(c) {
+  downloadJson(`checkliste-${slugifyFilename(c.title)}.json`, {
+    type: "saltynotes-checkliste",
+    version: 1,
+    title: c.title,
+    items: c.items.map((i) => ({ text: i.text, status: i.status || "", done: !!i.done })),
+  });
+}
+
+function importChecklistFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const items = Array.isArray(data.items) ? data.items : [];
+      const c = {
+        id: uid(),
+        title: data.title || "Importierte Checkliste",
+        items: items.map((i) => ({
+          id: uid(),
+          text: String(i.text || ""),
+          status: String(i.status || ""),
+          done: !!i.done,
+        })),
+        updatedAt: nowIso(),
+      };
+      state.checklists.push(c);
+      persist();
+      goTo("checkliste", "editor", c.id);
+    } catch {
+      showConfirm("Import fehlgeschlagen", "Diese Datei konnte nicht gelesen werden. Bitte eine zuvor exportierte Checklisten-Datei (.json) auswählen.", "OK", () => {});
+    }
+  };
+  reader.readAsText(file);
+}
+
 function checklistListHtml() {
   const items = [...state.checklists].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const cards = items.map((c) => {
@@ -195,6 +253,7 @@ function checklistListHtml() {
     return `
       <div class="card" data-open="${c.id}">
         <button class="card-delete" data-delete="${c.id}" title="Löschen" aria-label="Löschen">✕</button>
+        <button class="card-export" data-export="${c.id}" title="Als Datei exportieren" aria-label="Exportieren">⬇</button>
         <div class="card-title">${escapeHtml(c.title || "Ohne Titel")}</div>
         <div class="card-meta">${done}/${total} erledigt · ${formatDate(c.updatedAt)}</div>
         <div class="card-progress"><div style="width:${pct}%"></div></div>
@@ -210,6 +269,8 @@ function checklistListHtml() {
     </div>
     <div class="create-row">
       <button class="btn" id="newChecklist">+ Neue Checkliste</button>
+      <button class="btn secondary" id="importChecklist">⬆ Checkliste importieren</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden />
     </div>
     ${items.length ? `<div class="card-grid">${cards}</div>` :
       `<div class="empty-state">Noch keine Checkliste vorhanden. Leg direkt los!</div>`}
@@ -223,9 +284,17 @@ function wireChecklistList() {
     persist();
     goTo("checkliste", "editor", c.id);
   });
+  document.getElementById("importChecklist").addEventListener("click", () => {
+    document.getElementById("importFile").click();
+  });
+  document.getElementById("importFile").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importChecklistFromFile(file);
+    e.target.value = "";
+  });
   document.querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", (e) => {
-      if (e.target.closest("[data-delete]")) return;
+      if (e.target.closest("[data-delete]") || e.target.closest("[data-export]")) return;
       goTo("checkliste", "editor", el.dataset.open);
     });
   });
@@ -240,6 +309,13 @@ function wireChecklistList() {
       });
     });
   });
+  document.querySelectorAll("[data-export]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const c = state.checklists.find((x) => x.id === el.dataset.export);
+      if (c) exportChecklist(c);
+    });
+  });
 }
 
 function checklistEditorHtml(id) {
@@ -248,18 +324,24 @@ function checklistEditorHtml(id) {
   const rows = c.items.map((it) => `
     <div class="checklist-item ${it.done ? "done" : ""}" data-item="${it.id}">
       <input type="checkbox" ${it.done ? "checked" : ""} data-check="${it.id}" aria-label="Erledigt" />
-      <input type="text" value="${escapeHtml(it.text)}" data-text="${it.id}" placeholder="Eintrag…" />
+      <input type="text" class="item-text" value="${escapeHtml(it.text)}" data-text="${it.id}" placeholder="Eintrag…" />
+      <input type="text" class="item-status" value="${escapeHtml(it.status || "")}" data-status="${it.id}" placeholder="Status…" />
       <button class="item-remove" data-remove="${it.id}" aria-label="Eintrag entfernen">✕</button>
     </div>`).join("");
 
   return `
     <div class="btn-row" style="margin-bottom:16px;">
       <button class="btn ghost" id="backBtn">← Zurück</button>
+      <button class="btn secondary" id="exportOne">⬇ Exportieren</button>
     </div>
     <div class="sheet">
       <div class="editor-header">
         <input class="title-input" id="titleInput" value="${escapeHtml(c.title)}" placeholder="Titel der Checkliste" />
       </div>
+      ${c.items.length ? `
+      <div class="checklist-head">
+        <span></span><span>Aufgabe</span><span>Status</span><span></span>
+      </div>` : ""}
       <div class="checklist-items" id="itemsWrap">${rows}</div>
       <button class="btn secondary" id="addItem">+ Eintrag hinzufügen</button>
     </div>
@@ -270,6 +352,7 @@ function wireChecklistEditor(id) {
   const c = state.checklists.find((x) => x.id === id);
   if (!c) return;
   document.getElementById("backBtn").addEventListener("click", () => goTo("checkliste", "list"));
+  document.getElementById("exportOne").addEventListener("click", () => exportChecklist(c));
 
   document.getElementById("titleInput").addEventListener("input", (e) => {
     c.title = e.target.value;
@@ -278,11 +361,11 @@ function wireChecklistEditor(id) {
   });
 
   document.getElementById("addItem").addEventListener("click", () => {
-    c.items.push({ id: uid(), text: "", done: false });
+    c.items.push({ id: uid(), text: "", status: "", done: false });
     c.updatedAt = nowIso();
     persist();
     render();
-    const inputs = document.querySelectorAll("#itemsWrap input[type=text]");
+    const inputs = document.querySelectorAll("#itemsWrap .item-text");
     if (inputs.length) inputs[inputs.length - 1].focus();
   });
 
@@ -308,6 +391,15 @@ function wireChecklistEditor(id) {
         e.preventDefault();
         document.getElementById("addItem").click();
       }
+    });
+  });
+
+  document.querySelectorAll("[data-status]").forEach((inp) => {
+    inp.addEventListener("input", (e) => {
+      const item = c.items.find((i) => i.id === inp.dataset.status);
+      item.status = e.target.value;
+      c.updatedAt = nowIso();
+      persistDebounced();
     });
   });
 
