@@ -321,7 +321,11 @@ function wireChecklistList() {
 function checklistEditorHtml(id) {
   const c = state.checklists.find((x) => x.id === id);
   if (!c) return `<div class="empty-state">Checkliste nicht gefunden.</div>`;
-  const rows = c.items.map((it) => `
+  const sortedItems = c.items
+    .map((it, index) => ({ it, index }))
+    .sort((a, b) => Number(!!a.it.done) - Number(!!b.it.done) || a.index - b.index)
+    .map(({ it }) => it);
+  const rows = sortedItems.map((it) => `
     <div class="checklist-item ${it.done ? "done" : ""}" data-item="${it.id}">
       <input type="checkbox" ${it.done ? "checked" : ""} data-check="${it.id}" aria-label="Erledigt" />
       <input type="text" class="item-text" value="${escapeHtml(it.text)}" data-text="${it.id}" placeholder="Eintrag…" />
@@ -376,6 +380,10 @@ function wireChecklistEditor(id) {
       c.updatedAt = nowIso();
       persist();
       cb.closest(".checklist-item").classList.toggle("done", item.done);
+      // Kurze Pause, bevor der Punkt ans Listenende rutscht – man sieht das Abhaken noch.
+      setTimeout(() => {
+        if (route.section === "checkliste" && route.view === "editor" && route.id === id) render();
+      }, 450);
     });
   });
 
