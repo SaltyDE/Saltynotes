@@ -58,6 +58,24 @@ function sanitizeHtml(html) {
   return tmp.innerHTML;
 }
 
+/* ---- PDF-Export (über den Browser-Druckdialog: „Als PDF speichern") ---- */
+
+function printAsPdf(title, kindLabel, contentHtml) {
+  let area = document.getElementById("printArea");
+  if (!area) {
+    area = document.createElement("div");
+    area.id = "printArea";
+    document.body.appendChild(area);
+  }
+  const dateStr = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  area.innerHTML = `
+    <h1>${escapeHtml(title || "Ohne Titel")}</h1>
+    <div class="print-meta">${escapeHtml(kindLabel)} · exportiert am ${dateStr}</div>
+    <div class="print-body">${contentHtml && contentHtml.trim() ? contentHtml : "<p><em>(kein Inhalt)</em></p>"}</div>
+  `;
+  window.print();
+}
+
 /* ---------------- state ---------------- */
 
 function emptyState() {
@@ -430,6 +448,7 @@ function dokumentationListHtml() {
   const cards = items.map((d) => `
     <div class="card" data-open="${d.id}">
       <button class="card-delete" data-delete="${d.id}" title="Löschen" aria-label="Löschen">✕</button>
+      <button class="card-export" data-print="${d.id}" title="Als PDF exportieren" aria-label="Als PDF exportieren">🖨</button>
       <span class="card-tag">${d.kind === "anleitung" ? "Anleitung" : "Dokumentation"}</span>
       <div class="card-title">${escapeHtml(d.title || "Ohne Titel")}</div>
       <div class="card-meta">${formatDate(d.updatedAt)}</div>
@@ -469,7 +488,7 @@ function wireDokumentationList() {
 
   document.querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", (e) => {
-      if (e.target.closest("[data-delete]")) return;
+      if (e.target.closest("[data-delete]") || e.target.closest("[data-print]")) return;
       goTo("dokumentation", "editor", el.dataset.open);
     });
   });
@@ -484,6 +503,13 @@ function wireDokumentationList() {
       });
     });
   });
+  document.querySelectorAll("[data-print]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const d = state.documents.find((x) => x.id === el.dataset.print);
+      if (d) printAsPdf(d.title, d.kind === "anleitung" ? "Anleitung" : "Dokumentation", d.html);
+    });
+  });
 }
 
 function documentEditorHtml(id) {
@@ -492,6 +518,7 @@ function documentEditorHtml(id) {
   return `
     <div class="btn-row" style="margin-bottom:16px;">
       <button class="btn ghost" id="backBtn">← Zurück</button>
+      <button class="btn secondary" id="exportPdf">🖨 Als PDF exportieren</button>
     </div>
     <div class="editor-header">
       <input class="title-input" id="titleInput" value="${escapeHtml(d.title)}" placeholder="Titel" />
@@ -568,6 +595,10 @@ function wireDocumentEditor(id) {
   const d = state.documents.find((x) => x.id === id);
   if (!d) return;
   document.getElementById("backBtn").addEventListener("click", () => goTo("dokumentation", "list"));
+  document.getElementById("exportPdf").addEventListener("click", () => {
+    const liveHtml = document.getElementById("richArea").innerHTML;
+    printAsPdf(d.title, d.kind === "anleitung" ? "Anleitung" : "Dokumentation", liveHtml);
+  });
 
   document.getElementById("titleInput").addEventListener("input", (e) => {
     d.title = e.target.value;

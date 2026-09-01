@@ -633,3 +633,69 @@ h1, h2, h3, .brand-text, .nav-label, button, .page-title, .card-title {
   .toolbar button { min-width: 34px; height: 32px; font-size: 13px; }
   .page-title { font-size: 24px; }
 }
+
+/* ---------- PDF-Export (Browser-Druck: „Als PDF speichern") ---------- */
+
+#printArea { display: none; }
+
+@media print {
+  @page { margin: 1.8cm; }
+
+  #navToggle, #navScrim, .app-shell, #modalRoot { display: none !important; }
+
+  html, body {
+    background: #fff;
+    min-height: 0;
+  }
+
+  #printArea {
+    display: block;
+    max-width: 100%;
+    color: #1a1a1a;
+    font-family: "Segoe UI", Roboto, "Noto Sans", system-ui, sans-serif;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  #printArea h1 {
+    font-family: "Bevan", Georgia, serif;
+    font-size: 24pt;
+    color: #1a1a1a;
+    margin: 0 0 4px;
+  }
+
+  #printArea .print-meta {
+    font-size: 10pt;
+    color: #555;
+    margin-bottom: 22px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 12px;
+  }
+
+  #printArea .print-body h1,
+  #printArea .print-body h2,
+  #printArea .print-body h3 {
+    font-family: "Bevan", Georgia, serif;
+    color: #1a1a1a;
+    break-after: avoid;
+  }
+
+  #printArea .print-body p { margin: 0 0 10px; }
+  #printArea .print-body ul,
+  #printArea .print-body ol { padding-left: 22px; margin: 0 0 10px; }
+
+  #printArea .print-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 16px;
+    break-inside: avoid;
+  }
+  #printArea .print-body table td,
+  #printArea .print-body table th {
+    border: 1px solid #999;
+    padding: 6px 8px;
+  }
+  #printArea .print-body table th {
+    background: #eee;
+  }
+}
