@@ -641,14 +641,15 @@ h1, h2, h3, .brand-text, .nav-label, button, .page-title, .card-title {
 @media print {
   @page { margin: 1.8cm; }
 
-  #navToggle, #navScrim, .app-shell, #modalRoot { display: none !important; }
+  #navToggle, #navScrim, #modalRoot { display: none !important; }
+  body:not(.printing-mindmap) .app-shell { display: none !important; }
 
   html, body {
     background: #fff;
     min-height: 0;
   }
 
-  #printArea {
+  body:not(.printing-mindmap) #printArea {
     display: block;
     max-width: 100%;
     color: #1a1a1a;
@@ -697,5 +698,43 @@ h1, h2, h3, .brand-text, .nav-label, button, .page-title, .card-title {
   }
   #printArea .print-body table th {
     background: #eee;
+  }
+
+  #printArea .print-body table.print-checklist td.chk {
+    text-align: center;
+    width: 34px;
+    font-size: 14pt;
+  }
+
+  /* Mindmap: statt Fließtext wird die echte Zeichenfläche gedruckt */
+  body.printing-mindmap .sidebar,
+  body.printing-mindmap .btn-row,
+  body.printing-mindmap .mindmap-toolbar {
+    display: none !important;
+  }
+  body.printing-mindmap .content { padding: 0; }
+  body.printing-mindmap .editor-header { margin-bottom: 14px; }
+  body.printing-mindmap .title-input {
+    border: none;
+    background: none;
+    width: auto;
+    font-size: 22pt;
+    color: #1a1a1a;
+  }
+  body.printing-mindmap .mindmap-wrap {
+    border: none;
+    overflow: visible;
+    background: #fff;
+    min-height: 0;
+  }
+  body.printing-mindmap .mindmap-canvas svg line {
+    stroke: #444;
+  }
+  body.printing-mindmap .mm-node {
+    box-shadow: none;
+    border-color: #444;
+  }
+  body.printing-mindmap .mm-node-remove {
+    display: none;
   }
 }

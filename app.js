@@ -76,6 +76,48 @@ function printAsPdf(title, kindLabel, contentHtml) {
   window.print();
 }
 
+// Mindmaps sind ein Canvas aus frei positionierten Knoten, keine Fließtext-
+// Inhalte – dafür wird die echte Zeichenfläche gedruckt (auf Seitenbreite
+// skaliert) statt sie in Text umzuwandeln.
+function printMindmap(m) {
+  const canvas = document.getElementById("mmCanvas");
+  const wrap = document.getElementById("mmWrap");
+  if (!canvas || !wrap) return;
+
+  const nodeEls = [...canvas.querySelectorAll(".mm-node")];
+  let maxX = 300, maxY = 200;
+  nodeEls.forEach((el) => {
+    maxX = Math.max(maxX, el.offsetLeft + el.offsetWidth);
+    maxY = Math.max(maxY, el.offsetTop + el.offsetHeight);
+  });
+  maxX += 40;
+  maxY += 40;
+  const availableWidthPx = 950; // ungefähre nutzbare Druckbreite (A4 minus Rand)
+  const scale = Math.min(1, availableWidthPx / maxX);
+
+  canvas.style.transformOrigin = "top left";
+  canvas.style.transform = `scale(${scale})`;
+  canvas.style.width = maxX + "px";
+  canvas.style.height = maxY + "px";
+  wrap.style.height = Math.ceil(maxY * scale) + "px";
+
+  document.body.classList.add("printing-mindmap");
+
+  const cleanup = () => {
+    document.body.classList.remove("printing-mindmap");
+    canvas.style.transform = "";
+    canvas.style.width = "";
+    canvas.style.height = "";
+    wrap.style.height = "";
+    window.removeEventListener("afterprint", cleanup);
+  };
+  // Listener zuerst registrieren: window.print() blockiert in Desktop-Browsern,
+  // bis der Dialog geschlossen wird, und afterprint kann noch währenddessen feuern.
+  window.addEventListener("afterprint", cleanup);
+  setTimeout(cleanup, 5000);
+  window.print();
+}
+
 /* ---------------- state ---------------- */
 
 function emptyState() {
@@ -204,62 +246,18 @@ function render() {
    1) CHECKLISTE
    ========================================================= */
 
-/* ---- Export / Import (Checkliste als .json-Datei) ---- */
-
-function slugifyFilename(name) {
-  return (name || "checkliste")
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 60) || "checkliste";
-}
-
-function downloadJson(filename, dataObj) {
-  const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function exportChecklist(c) {
-  downloadJson(`checkliste-${slugifyFilename(c.title)}.json`, {
-    type: "saltynotes-checkliste",
-    version: 1,
-    title: c.title,
-    items: c.items.map((i) => ({ text: i.text, status: i.status || "", done: !!i.done })),
-  });
-}
-
-function importChecklistFromFile(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(reader.result);
-      const items = Array.isArray(data.items) ? data.items : [];
-      const c = {
-        id: uid(),
-        title: data.title || "Importierte Checkliste",
-        items: items.map((i) => ({
-          id: uid(),
-          text: String(i.text || ""),
-          status: String(i.status || ""),
-          done: !!i.done,
-        })),
-        updatedAt: nowIso(),
-      };
-      state.checklists.push(c);
-      persist();
-      goTo("checkliste", "editor", c.id);
-    } catch {
-      showConfirm("Import fehlgeschlagen", "Diese Datei konnte nicht gelesen werden. Bitte eine zuvor exportierte Checklisten-Datei (.json) auswählen.", "OK", () => {});
-    }
-  };
-  reader.readAsText(file);
+function checklistPrintHtml(c) {
+  const rows = c.items.map((it) => `
+    <tr>
+      <td class="chk">${it.done ? "☑" : "☐"}</td>
+      <td${it.done ? ' style="text-decoration:line-through;color:#777;"' : ""}>${escapeHtml(it.text || "")}</td>
+      <td>${escapeHtml(it.status || "")}</td>
+    </tr>`).join("");
+  return `
+    <table class="print-checklist">
+      <thead><tr><th></th><th>Aufgabe</th><th>Status</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="3"><em>(keine Einträge)</em></td></tr>`}</tbody>
+    </table>`;
 }
 
 function checklistListHtml() {
@@ -271,7 +269,7 @@ function checklistListHtml() {
     return `
       <div class="card" data-open="${c.id}">
         <button class="card-delete" data-delete="${c.id}" title="Löschen" aria-label="Löschen">✕</button>
-        <button class="card-export" data-export="${c.id}" title="Als Datei exportieren" aria-label="Exportieren">⬇</button>
+        <button class="card-export" data-print="${c.id}" title="Als PDF exportieren" aria-label="Als PDF exportieren">🖨</button>
         <div class="card-title">${escapeHtml(c.title || "Ohne Titel")}</div>
         <div class="card-meta">${done}/${total} erledigt · ${formatDate(c.updatedAt)}</div>
         <div class="card-progress"><div style="width:${pct}%"></div></div>
@@ -287,8 +285,6 @@ function checklistListHtml() {
     </div>
     <div class="create-row">
       <button class="btn" id="newChecklist">+ Neue Checkliste</button>
-      <button class="btn secondary" id="importChecklist">⬆ Checkliste importieren</button>
-      <input type="file" id="importFile" accept="application/json,.json" hidden />
     </div>
     ${items.length ? `<div class="card-grid">${cards}</div>` :
       `<div class="empty-state">Noch keine Checkliste vorhanden. Leg direkt los!</div>`}
@@ -302,17 +298,9 @@ function wireChecklistList() {
     persist();
     goTo("checkliste", "editor", c.id);
   });
-  document.getElementById("importChecklist").addEventListener("click", () => {
-    document.getElementById("importFile").click();
-  });
-  document.getElementById("importFile").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) importChecklistFromFile(file);
-    e.target.value = "";
-  });
   document.querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", (e) => {
-      if (e.target.closest("[data-delete]") || e.target.closest("[data-export]")) return;
+      if (e.target.closest("[data-delete]") || e.target.closest("[data-print]")) return;
       goTo("checkliste", "editor", el.dataset.open);
     });
   });
@@ -327,11 +315,11 @@ function wireChecklistList() {
       });
     });
   });
-  document.querySelectorAll("[data-export]").forEach((el) => {
+  document.querySelectorAll("[data-print]").forEach((el) => {
     el.addEventListener("click", (e) => {
       e.stopPropagation();
-      const c = state.checklists.find((x) => x.id === el.dataset.export);
-      if (c) exportChecklist(c);
+      const c = state.checklists.find((x) => x.id === el.dataset.print);
+      if (c) printAsPdf(c.title, "Checkliste", checklistPrintHtml(c));
     });
   });
 }
@@ -354,7 +342,7 @@ function checklistEditorHtml(id) {
   return `
     <div class="btn-row" style="margin-bottom:16px;">
       <button class="btn ghost" id="backBtn">← Zurück</button>
-      <button class="btn secondary" id="exportOne">⬇ Exportieren</button>
+      <button class="btn secondary" id="exportPdf">🖨 Als PDF exportieren</button>
     </div>
     <div class="sheet">
       <div class="editor-header">
@@ -374,7 +362,7 @@ function wireChecklistEditor(id) {
   const c = state.checklists.find((x) => x.id === id);
   if (!c) return;
   document.getElementById("backBtn").addEventListener("click", () => goTo("checkliste", "list"));
-  document.getElementById("exportOne").addEventListener("click", () => exportChecklist(c));
+  document.getElementById("exportPdf").addEventListener("click", () => printAsPdf(c.title, "Checkliste", checklistPrintHtml(c)));
 
   document.getElementById("titleInput").addEventListener("input", (e) => {
     c.title = e.target.value;
@@ -383,12 +371,15 @@ function wireChecklistEditor(id) {
   });
 
   document.getElementById("addItem").addEventListener("click", () => {
-    c.items.push({ id: uid(), text: "", status: "", done: false });
+    const newItem = { id: uid(), text: "", status: "", done: false };
+    c.items.push(newItem);
     c.updatedAt = nowIso();
     persist();
     render();
-    const inputs = document.querySelectorAll("#itemsWrap .item-text");
-    if (inputs.length) inputs[inputs.length - 1].focus();
+    // Fertige Punkte stehen sortiert unten, daher gezielt das neue Element
+    // fokussieren statt "das letzte Eingabefeld in der Liste".
+    const newInput = document.querySelector(`[data-text="${newItem.id}"]`);
+    if (newInput) newInput.focus();
   });
 
   document.querySelectorAll("[data-check]").forEach((cb) => {
@@ -686,6 +677,7 @@ function brainstormingListHtml() {
   const cards = items.map((it) => `
     <div class="card" data-open="${it.id}" data-type="${it.type}">
       <button class="card-delete" data-delete="${it.id}" data-type="${it.type}" title="Löschen" aria-label="Löschen">✕</button>
+      <button class="card-export" data-print="${it.id}" data-type="${it.type}" title="Als PDF exportieren" aria-label="Als PDF exportieren">🖨</button>
       <span class="card-tag">${it.type === "mindmap" ? "Mindmap" : "Sammlung"}</span>
       <div class="card-title">${escapeHtml(it.title || "Ohne Titel")}</div>
       <div class="card-meta">${formatDate(it.updatedAt)}</div>
@@ -729,7 +721,7 @@ function wireBrainstormingList() {
 
   document.querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", (e) => {
-      if (e.target.closest("[data-delete]")) return;
+      if (e.target.closest("[data-delete]") || e.target.closest("[data-print]")) return;
       const view = el.dataset.type === "mindmap" ? "mindmap-editor" : "sammlung-editor";
       goTo("brainstorming", view, el.dataset.open);
     });
@@ -747,6 +739,22 @@ function wireBrainstormingList() {
       });
     });
   });
+  document.querySelectorAll("[data-print]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = el.dataset.print;
+      if (el.dataset.type === "mindmap") {
+        const m = state.mindmaps.find((x) => x.id === id);
+        if (m) {
+          goTo("brainstorming", "mindmap-editor", id);
+          requestAnimationFrame(() => requestAnimationFrame(() => printMindmap(m)));
+        }
+      } else {
+        const c = state.collections.find((x) => x.id === id);
+        if (c) printAsPdf(c.title, "Sammlung", c.html);
+      }
+    });
+  });
 }
 
 /* ---- 3a) Sammlung: blanko linierte Seite ---- */
@@ -757,6 +765,7 @@ function collectionEditorHtml(id) {
   return `
     <div class="btn-row" style="margin-bottom:16px;">
       <button class="btn ghost" id="backBtn">← Zurück</button>
+      <button class="btn secondary" id="exportPdf">🖨 Als PDF exportieren</button>
     </div>
     <div class="editor-header">
       <input class="title-input" id="titleInput" value="${escapeHtml(c.title)}" placeholder="Titel" />
@@ -769,6 +778,10 @@ function wireCollectionEditor(id) {
   const c = state.collections.find((x) => x.id === id);
   if (!c) return;
   document.getElementById("backBtn").addEventListener("click", () => goTo("brainstorming", "list"));
+  document.getElementById("exportPdf").addEventListener("click", () => {
+    const liveHtml = document.getElementById("linedPage").innerHTML;
+    printAsPdf(c.title, "Sammlung", liveHtml);
+  });
   document.getElementById("titleInput").addEventListener("input", (e) => {
     c.title = e.target.value;
     c.updatedAt = nowIso();
@@ -799,6 +812,7 @@ function mindmapEditorHtml(id) {
   return `
     <div class="btn-row" style="margin-bottom:16px;">
       <button class="btn ghost" id="backBtn">← Zurück</button>
+      <button class="btn secondary" id="exportPdf">🖨 Als PDF exportieren</button>
     </div>
     <div class="editor-header">
       <input class="title-input" id="titleInput" value="${escapeHtml(m.title)}" placeholder="Titel der Mindmap" />
@@ -820,6 +834,7 @@ function wireMindmapEditor(id) {
   const m = state.mindmaps.find((x) => x.id === id);
   if (!m) return;
   document.getElementById("backBtn").addEventListener("click", () => goTo("brainstorming", "list"));
+  document.getElementById("exportPdf").addEventListener("click", () => printMindmap(m));
   document.getElementById("titleInput").addEventListener("input", (e) => {
     m.title = e.target.value;
     m.updatedAt = nowIso();
